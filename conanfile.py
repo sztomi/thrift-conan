@@ -9,6 +9,7 @@ class thrift(ConanFile):
     name = 'thrift'
     version = '0.9.3'
     license = 'MIT'
+    url = 'https://github.com/sztomi/thrift-conan'
     repo_url = 'https://git-wip-us.apache.org/repos/asf/thrift.git'
     description = 'Apache Thrift'
     settings = 'os', 'compiler', 'build_type', 'arch'
