@@ -1,0 +1,5 @@
+[requires]
+thrift/0.9.3@sztomi/testing
+
+[generators]
+cmake
