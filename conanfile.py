@@ -14,10 +14,10 @@ class thrift(ConanFile):
     description = 'Apache Thrift'
     settings = 'os', 'compiler', 'build_type', 'arch'
     requires = (
-            'libevent/2.0.22@theirix/stable',
-            'OpenSSL/1.0.2g@lasote/stable',
-            'zlib/1.2.8@lasote/stable',
-            'Boost/1.60.0@lasote/stable',
+	    'libevent/2.0.22@theirix/stable',
+	    'OpenSSL/1.0.2g@lasote/stable',
+	    'zlib/1.2.8@lasote/stable',
+	    'Boost/1.60.0@lasote/stable',
     )
     options = {
         'build_qt4_lib': [True, False],
@@ -72,6 +72,8 @@ class thrift(ConanFile):
             flag_name = opt.split('_')[1]
             return '--with-{}={}'.format(flag_name,
                     'yes' if value else 'no')
+	    def up_one(folder):
+	        return os.path.abspath(os.path.join(folder, '..'))
 
         with_flags = []
         for attr, _ in self.options.iteritems():
@@ -79,17 +81,18 @@ class thrift(ConanFile):
             with_flags.append(option_to_flag(attr, value))
 
         integration_flags = [
-            '--with-boost={}'.format(self.deps_cpp_info['Boost'].include_paths[0]),
+            '--with-boost={}'.format(up_one(self.deps_cpp_info['Boost'].include_paths[0])),
             '--with-boost-libdir={}'.format(self.deps_cpp_info['Boost'].lib_paths[0]),
-            '--with-openssl={}'.format(self.deps_cpp_info['OpenSSL'].include_paths[0]),
-            '--with-zlib={}'.format(self.deps_cpp_info['zlib'].include_paths[0]),
-            '--with-libevent={}'.format(self.deps_cpp_info['libevent'].include_paths[0]),
+            '--with-openssl={}'.format(up_one(self.deps_cpp_info['OpenSSL'].include_paths[0])),
+            '--with-zlib={}'.format(up_one(self.deps_cpp_info['zlib'].include_paths[0])),
+            '--with-libevent={}'.format(up_one(self.deps_cpp_info['libevent'].include_paths[0])),
         ]
 
         other_flags = [
             '--disable-tests',
             '--disable-tutorial',
-            '--disable-coverage'
+            '--disable-coverage',
+	        '--disable-shared',
         ]
 
         def patch_files():
@@ -110,15 +113,22 @@ class thrift(ConanFile):
         os.chdir(self.src_dir)
         patch_files()
         self.run('./bootstrap.sh')
-        self.run('./configure {} {} {} --prefix={}'
-                        .format(' '.join(integration_flags),
+        conf = 'LIBS="-ldl" LDFLAGS=-L{} bash -c "./configure {} {} {}"'.format(
+				self.deps_cpp_info['OpenSSL'].lib_paths[0],
+				                ' '.join(integration_flags),
                                 ' '.join(with_flags),
-                                ' '.join(other_flags),
-                                self.package_folder))
+                                ' '.join(other_flags))
+	print(conf)
+        self.run(conf)
         self.run('make')
-        self.run('make install')
+
+    def package(self):
+        self.copy('*.h', src='thrift/lib/cpp/src', dst='include')
+        self.copy('*.tcc', src='thrift/lib/cpp/src', dst='include')
+        self.copy('*.so', dst='lib', keep_path=False)
+        self.copy('*.dll', dst='lib', keep_path=False)
+        self.copy('*.lib', dst='lib', keep_path=False)
+        self.copy('*.a', dst='lib', keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ['thrift']
-        # if platform.system() == 'Linux':
-            # self.cpp_info.libs.append('pthread')
