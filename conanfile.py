@@ -3,6 +3,7 @@ from __future__ import print_function
 from conans import ConanFile, CMake, tools
 import os
 import platform
+import subprocess
 
 
 class thrift(ConanFile):
@@ -14,10 +15,17 @@ class thrift(ConanFile):
     description = 'Apache Thrift'
     settings = 'os', 'compiler', 'build_type', 'arch'
     requires = (
-	    'libevent/2.0.22@theirix/stable',
-	    'OpenSSL/1.0.2g@lasote/stable',
-	    'zlib/1.2.8@lasote/stable',
-	    'Boost/1.60.0@lasote/stable',
+        'libevent/2.0.22@theirix/stable',
+        'OpenSSL/1.0.2g@lasote/stable',
+        'zlib/1.2.8@lasote/stable',
+        'Boost/1.60.0@lasote/stable',
+        'm4/latest@sztomi/testing',
+        'libtool/2.4.6@sztomi/testing',
+        'autoconf/2.69@sztomi/testing',
+        'automake/1.15@sztomi/testing',
+        'pkg-config/0.29.1@sztomi/testing',
+        'bison/3.0.4@sztomi/testing',
+        'flex/2.6.3@sztomi/testing'
     )
     options = {
         'build_qt4_lib': [True, False],
@@ -57,7 +65,7 @@ class thrift(ConanFile):
         'build_d_lib=False',
         'build_tests=False',
     )
-    generators = 'cmake'
+    generators = 'cmake', 'virtualenv'
     src_dir = 'thrift'
 
     def source(self):
@@ -72,8 +80,8 @@ class thrift(ConanFile):
             flag_name = opt.split('_')[1]
             return '--with-{}={}'.format(flag_name,
                     'yes' if value else 'no')
-	    def up_one(folder):
-	        return os.path.abspath(os.path.join(folder, '..'))
+        def up_one(folder):
+            return os.path.abspath(os.path.join(folder, '..'))
 
         with_flags = []
         for attr, _ in self.options.iteritems():
@@ -92,8 +100,22 @@ class thrift(ConanFile):
             '--disable-tests',
             '--disable-tutorial',
             '--disable-coverage',
-	        '--disable-shared',
+            '--disable-shared',
         ]
+        
+        env_vars = dict(
+            PKG_PROG_PKG_CONFIG = os.path.join(self.deps_env_info['pkg-config'].path[0], 'pkg-config'),
+            LIBS = '-ldl',
+            LDFLAGS = '-L{}'.format(self.deps_cpp_info['OpenSSL'].lib_paths[0]),
+            ACLOCAL_PATH = '$ACLOCAL_PATH:{}'.format(self.deps_env_info['pkg-config'].path[1])
+        )
+        
+        env_str = ''
+        
+        for key, value in env_vars.items():
+            env_str += '{}="{}" '.format(key, value)
+            
+        print(env_str)
 
         def patch_files():
             filename = 'lib/cpp/src/thrift/transport/TSSLSocket.cpp'
@@ -109,18 +131,23 @@ class thrift(ConanFile):
                 print('Changing "{old_string}" to "{new_string}" in {filename}'.format(**locals()))
                 contents = contents.replace(old_string, new_string)
                 f.write(contents)
-
+                
         os.chdir(self.src_dir)
         patch_files()
-        self.run('./bootstrap.sh')
-        conf = 'LIBS="-ldl" LDFLAGS=-L{} bash -c "./configure {} {} {}"'.format(
-				self.deps_cpp_info['OpenSSL'].lib_paths[0],
-				                ' '.join(integration_flags),
+        
+        def run_in_env(cmd):
+            activate = '. ../activate.sh && '
+            self.run(activate + cmd)
+            
+        run_in_env('{} ./bootstrap.sh'.format(env_str))
+
+        conf = '{} bash -c "./configure {} {} {}"'.format(
+                                env_str,
+                                ' '.join(integration_flags),
                                 ' '.join(with_flags),
                                 ' '.join(other_flags))
-	print(conf)
-        self.run(conf)
-        self.run('make')
+        run_in_env(conf)
+        run_in_env('make')
 
     def package(self):
         self.copy('*.h', src='thrift/lib/cpp/src', dst='include')
